@@ -1,0 +1,104 @@
+---
+title: "BTC Sports Betting"
+author: "Paul Sztorc"
+date: "April 13, 2016"
+output: html_document
+---
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+```{r PreLoad,echo=FALSE,message=FALSE}
+
+# Cleanup the current workspace
+rm(list=ls())
+
+# I declare this function, for easier/ automatic loading of packages...helps when working across different machines.
+Use <- function(package) {
+  if(suppressWarnings(!require(package,character.only=TRUE))) install.packages(package,repos="http://cran.case.edu/")
+  require(package,character.only=TRUE)
+}
+
+```
+
+
+```{r GetBitcoinData, warnings = FALSE}
+
+Use('Quandl')
+
+Btc_tx <- suppressWarnings( Quandl("BCHAIN/NTRAN") )
+
+
+d2 <- t(Btc_tx)
+b_tx <- as.numeric( d2[,2] )
+
+# Format seems to be completely broken...
+# ... fixing it.
+Dates <- seq(from = as.Date("2016-04-12"), to = as.Date("2009-01-03"), by = "-1 day")
+length(Dates) == length(b_tx) # TRUe
+
+# Reassemble the data, formatted correctly
+BTC_tx <- data.frame(  "date"=Dates,
+                       "b.tx"=b_tx    )[-1,]
+
+head(BTC_tx)
+lapply(BTC_tx, class) # Date, numeric
+
+```
+
+
+```{r, FootballData}
+
+Use("XLConnect")
+
+Excel_Sheet <- "https://excelfantasyfootball.wordpress.com/2015/04/26/nfl-2015-schedule-free-excel-spreadsheet/"
+# Modified by me.
+
+Data2 <- readNamedRegionFromFile(file = "C:/Users/Psztorc/Documents/GitHub/btc-sportsbet-research/nfl-2015-schedule-pfs.xlsx", "paul")
+
+SportsDates <- data.frame("date" = as.Date(Data2[,1]),
+                          "gametype" = factor(Data2[,2]))
+
+lapply(SportsDates, class) # Date, numeric
+
+SportsDates$daybefore <- SportsDates$date - 1
+
+```
+
+Merge and Plot
+------------------
+
+Time to combine the two datasets, and compare them. 
+
+I compare using a basic visualization, and a basic linear model.
+
+
+```{r, Merge and Plot}
+
+# BTC Transactions Near the 2015 Season
+Set1 <- BTC_tx[50:300,]
+Set2 <- SportsDates[,-1]
+names(Set2)[2] <- "date"
+All <- merge( Set1, Set2 , all = TRUE)
+
+# Add a new factor, for days where there isn't a game tomorrow.
+temp <- as.character(All[,3])
+temp[ is.na(temp) ] <-  "None"
+All[,3] <- as.factor(temp)
+
+All$GameTomorrow <- All[,3] != "None"
+
+Use('ggplot2')
+
+p1 <- ggplot(All, aes(x=b.tx, color=GameTomorrow))
+p1 + geom_density(size=2) + theme_bw() + labs(x = "Today's # of BTC txns", y = "Density", title = "June 17, 2015 through Feb 22, 2016") + theme(legend.position = "bottom")
+
+m1 <- lm(b.tx ~ date + GameTomorrow, data = All)
+summary(m1)
+
+```
+
+The dates were chosen arbitrarily by me. I did not revise them (not once!), and therefore did no data dredging (you'll have to take my word for it)!
+
+The results would appear to be that "having a football game tomorrow" is associated with about 8000 *fewer* Bitcoin transactions.
+
+I have no idea who used what time zone, to calculate either of the two datasets that I merged! So this research is basically worthless although it was fun to do while I finished listening to the weekly Bitcoin Uncensored.
